@@ -151,3 +151,4 @@ Add new migration: drop a file `schema/migrations/00X_descriptive_name.sql` (num
 - `JWT_SECRET` — JWT signing secret (change in production!)
 - `PORT` — HTTP port (default 8080)
 - `LOG_LEVEL` — Logging verbosity (default 'info')
+# netmap-vn-backend
