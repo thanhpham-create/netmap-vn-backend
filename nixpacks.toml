@@ -1,8 +1,14 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "yarn"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["yarn install --frozen-lockfile"]
+# Use Corepack to pick up Yarn 4 from package.json's packageManager field.
+# `--immutable` is Yarn 4's equivalent of `--frozen-lockfile`.
+cmds = [
+  "corepack enable",
+  "corepack prepare --activate",
+  "yarn install --immutable"
+]
 
 [phases.build]
 cmds = ["yarn build"]
