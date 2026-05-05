@@ -1,0 +1,3 @@
+-- ⚠️  DEPRECATED — schema lives in /schema/migrations/ now.
+-- Run `yarn db:migrate` (production-safe) or `yarn db:setup` (dev only, destructive).
+-- You can delete this file.
