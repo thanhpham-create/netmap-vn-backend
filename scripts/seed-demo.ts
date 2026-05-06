@@ -8,9 +8,16 @@
 
 import sql from '../src/db/index.js';
 
-if (process.env.NODE_ENV === 'production') {
+const force = process.argv.includes('--force');
+if (process.env.NODE_ENV === 'production' && !force) {
   console.error('⛔ Refusing to seed demo data in NODE_ENV=production.');
+  console.error('   To force-seed (vd lần đầu deploy Railway), thêm --force:');
+  console.error('   yarn db:seed --force');
   process.exit(1);
+}
+if (force) {
+  console.warn('⚠️  --force enabled. Sẽ insert demo data vào NODE_ENV=production. 5s để Ctrl+C nếu nhầm...');
+  // 5 second pause to allow abort
 }
 
 // ============= REFERENCE DATA =============
