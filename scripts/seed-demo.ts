@@ -22,16 +22,42 @@ if (force) {
 
 // ============= REFERENCE DATA =============
 
-// 8 thành phố lớn VN với tọa độ trung tâm
+// 30 thành phố/tỉnh lớn VN với tọa độ trung tâm.
+// Spread rộng để map nhìn ở zoom toàn quốc có chấm khắp.
 const CITIES = [
-  { name: 'Hà Nội',     province: 'Hà Nội',         district: 'Hoàn Kiếm',  lat: 21.0285, lng: 105.8542, weight: 25 },
-  { name: 'TP.HCM',     province: 'TP. Hồ Chí Minh', district: 'Quận 1',     lat: 10.7769, lng: 106.7009, weight: 30 },
-  { name: 'Đà Nẵng',    province: 'Đà Nẵng',        district: 'Hải Châu',   lat: 16.0544, lng: 108.2022, weight: 12 },
-  { name: 'Hải Phòng',  province: 'Hải Phòng',      district: 'Hồng Bàng',  lat: 20.8525, lng: 106.6837, weight: 8 },
-  { name: 'Cần Thơ',    province: 'Cần Thơ',        district: 'Ninh Kiều',  lat: 10.0341, lng: 105.7882, weight: 6 },
-  { name: 'Nha Trang',  province: 'Khánh Hòa',      district: 'Nha Trang',  lat: 12.2388, lng: 109.1967, weight: 7 },
-  { name: 'Đà Lạt',     province: 'Lâm Đồng',       district: 'Đà Lạt',     lat: 11.9404, lng: 108.4583, weight: 5 },
-  { name: 'Vũng Tàu',   province: 'Bà Rịa - Vũng Tàu', district: 'Vũng Tàu', lat: 10.4113, lng: 107.1365, weight: 7 },
+  // Miền Bắc
+  { name: 'Hà Nội',     province: 'Hà Nội',          district: 'Hoàn Kiếm', lat: 21.0285, lng: 105.8542, weight: 22 },
+  { name: 'Hải Phòng',  province: 'Hải Phòng',       district: 'Hồng Bàng', lat: 20.8525, lng: 106.6837, weight: 7 },
+  { name: 'Hạ Long',    province: 'Quảng Ninh',      district: 'Hạ Long',   lat: 20.9711, lng: 107.0466, weight: 4 },
+  { name: 'Bắc Ninh',   province: 'Bắc Ninh',        district: 'Bắc Ninh',  lat: 21.1861, lng: 106.0763, weight: 3 },
+  { name: 'Thái Nguyên',province: 'Thái Nguyên',     district: 'Thái Nguyên',lat: 21.5944, lng: 105.8480, weight: 2 },
+  { name: 'Nam Định',   province: 'Nam Định',        district: 'Nam Định',  lat: 20.4385, lng: 106.1621, weight: 2 },
+  { name: 'Việt Trì',   province: 'Phú Thọ',         district: 'Việt Trì',  lat: 21.3227, lng: 105.4024, weight: 2 },
+  { name: 'Sơn La',     province: 'Sơn La',          district: 'Sơn La',    lat: 21.3256, lng: 103.9188, weight: 1 },
+  { name: 'Lào Cai',    province: 'Lào Cai',         district: 'Lào Cai',   lat: 22.4856, lng: 103.9707, weight: 1 },
+  // Miền Trung
+  { name: 'Thanh Hóa',  province: 'Thanh Hóa',       district: 'Thanh Hóa', lat: 19.8067, lng: 105.7765, weight: 4 },
+  { name: 'Vinh',       province: 'Nghệ An',         district: 'Vinh',      lat: 18.6790, lng: 105.6813, weight: 4 },
+  { name: 'Huế',        province: 'Thừa Thiên Huế',  district: 'Huế',       lat: 16.4637, lng: 107.5909, weight: 4 },
+  { name: 'Đà Nẵng',    province: 'Đà Nẵng',         district: 'Hải Châu',  lat: 16.0544, lng: 108.2022, weight: 10 },
+  { name: 'Hội An',     province: 'Quảng Nam',       district: 'Hội An',    lat: 15.8801, lng: 108.3380, weight: 2 },
+  { name: 'Quy Nhơn',   province: 'Bình Định',       district: 'Quy Nhơn',  lat: 13.7820, lng: 109.2200, weight: 3 },
+  { name: 'Nha Trang',  province: 'Khánh Hòa',       district: 'Nha Trang', lat: 12.2388, lng: 109.1967, weight: 5 },
+  { name: 'Phan Thiết', province: 'Bình Thuận',      district: 'Phan Thiết',lat: 10.9333, lng: 108.1000, weight: 3 },
+  { name: 'Buôn Ma Thuột', province: 'Đắk Lắk',      district: 'Buôn Ma Thuột', lat: 12.6667, lng: 108.0500, weight: 2 },
+  { name: 'Pleiku',     province: 'Gia Lai',         district: 'Pleiku',    lat: 13.9833, lng: 108.0000, weight: 2 },
+  { name: 'Đà Lạt',     province: 'Lâm Đồng',        district: 'Đà Lạt',    lat: 11.9404, lng: 108.4583, weight: 3 },
+  // Miền Nam
+  { name: 'TP.HCM',     province: 'TP. Hồ Chí Minh', district: 'Quận 1',    lat: 10.7769, lng: 106.7009, weight: 25 },
+  { name: 'Biên Hòa',   province: 'Đồng Nai',        district: 'Biên Hòa',  lat: 10.9472, lng: 106.8430, weight: 4 },
+  { name: 'Thủ Dầu Một',province: 'Bình Dương',      district: 'Thủ Dầu Một', lat: 10.9803, lng: 106.6519, weight: 4 },
+  { name: 'Vũng Tàu',   province: 'Bà Rịa - Vũng Tàu', district: 'Vũng Tàu',lat: 10.4113, lng: 107.1365, weight: 5 },
+  { name: 'Mỹ Tho',     province: 'Tiền Giang',      district: 'Mỹ Tho',    lat: 10.3600, lng: 106.3600, weight: 2 },
+  { name: 'Cần Thơ',    province: 'Cần Thơ',         district: 'Ninh Kiều', lat: 10.0341, lng: 105.7882, weight: 5 },
+  { name: 'Long Xuyên', province: 'An Giang',        district: 'Long Xuyên',lat: 10.3863, lng: 105.4359, weight: 2 },
+  { name: 'Rạch Giá',   province: 'Kiên Giang',      district: 'Rạch Giá',  lat: 10.0167, lng: 105.0833, weight: 2 },
+  { name: 'Cà Mau',     province: 'Cà Mau',          district: 'Cà Mau',    lat: 9.1769, lng: 105.1500, weight: 2 },
+  { name: 'Phú Quốc',   province: 'Kiên Giang',      district: 'Phú Quốc',  lat: 10.2270, lng: 103.9590, weight: 2 },
 ];
 
 // Carriers theo market share (Viettel dominant)
@@ -143,7 +169,7 @@ async function seed() {
   console.log(`  ✓ ${devices.length} devices`);
 
   // 3. Speed tests
-  const N_TESTS = parseInt(process.env.SEED_TESTS || '1000');
+  const N_TESTS = parseInt(process.env.SEED_TESTS || '3000');
   console.log(`→ Inserting ${N_TESTS} speed tests...`);
 
   const BATCH = 100;
@@ -154,8 +180,10 @@ async function seed() {
       const city = pickWeighted(CITIES);
       const carrier = pickWeighted(CARRIERS);
       const network = pickWeighted(NETWORKS);
-      const lat = jitter(city.lat, 0.05);
-      const lng = jitter(city.lng, 0.05);
+      // Spread tests trong bán kính ~15km quanh trung tâm city (jitter 0.25° ≈ 25km diameter).
+      // Đủ rộng để map zoom-out toàn quốc nhìn thấy cluster, mà vẫn local đủ.
+      const lat = jitter(city.lat, 0.25);
+      const lng = jitter(city.lng, 0.25);
       const device = devices[randInt(0, devices.length - 1)];
       // Recorded within last 30 days (skewed toward recent)
       const daysAgo = Math.pow(Math.random(), 2) * 30;
