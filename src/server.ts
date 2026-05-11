@@ -38,11 +38,22 @@ const fastify = Fastify({
 async function bootstrap() {
   // CORS — let @fastify/cors handle it. Manual `*` + credentials breaks browsers.
   // For prod, set CORS_ORIGINS="https://netmap.vn,https://app.netmap.vn"
-  const corsOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim())
+  // Also auto-accept *.vercel.app (preview + prod) để khỏi phải update env mỗi deploy.
+  const allowedList = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
+  const corsOrigin: any = allowedList
+    ? (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+        // Non-browser requests (curl, server-to-server) have no Origin header — allow.
+        if (!origin) return cb(null, true);
+        if (allowedList.includes(origin)) return cb(null, true);
+        // Auto-allow Vercel deployments (prod + previews share the same backend safely).
+        if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return cb(null, true);
+        return cb(new Error('Not allowed by CORS'), false);
+      }
     : true; // dev: allow all
   await fastify.register(cors, {
-    origin: corsOrigins,
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
