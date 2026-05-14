@@ -49,6 +49,8 @@ async function bootstrap() {
         if (allowedList.includes(origin)) return cb(null, true);
         // Auto-allow Vercel deployments (prod + previews share the same backend safely).
         if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return cb(null, true);
+        // Auto-allow penwin.vn subdomains (netmap.penwin.vn + tương lai).
+        if (/^https:\/\/([a-z0-9-]+\.)?penwin\.vn$/i.test(origin)) return cb(null, true);
         return cb(new Error('Not allowed by CORS'), false);
       }
     : true; // dev: allow all
