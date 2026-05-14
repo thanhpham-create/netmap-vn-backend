@@ -3,6 +3,7 @@ import { Sentry } from './lib/sentry.js';
 
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import sql from './db/index.js';
@@ -36,6 +37,16 @@ const fastify = Fastify({
 });
 
 async function bootstrap() {
+  // Security headers — HSTS, X-Content-Type-Options, X-Frame-Options, etc.
+  // Disabling CSP because this is a JSON API; CSP enforcement is responsibility of the SPA.
+  await fastify.register(helmet, {
+    contentSecurityPolicy: false,
+    // 1 year HSTS, include subdomains, preload-ready
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    // Disable noSniff override — handled per-route if needed
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow embedding API from frontend
+  });
+
   // CORS — let @fastify/cors handle it. Manual `*` + credentials breaks browsers.
   // For prod, set CORS_ORIGINS="https://netmap.vn,https://app.netmap.vn"
   // Also auto-accept *.vercel.app (preview + prod) để khỏi phải update env mỗi deploy.
