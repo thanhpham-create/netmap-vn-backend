@@ -163,6 +163,72 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
     }
   );
 
+  // GET /api/v1/leaderboard/provinces — tỉnh contribute nhiều nhất.
+  // Khác với 3 endpoint trên (rank theo user), endpoint này rank theo tỉnh —
+  // không cần phân biệt user, chỉ aggregate tests + outage_reports theo province.
+  fastify.get<{ Querystring: { period?: string; limit?: string } }>(
+    '/api/v1/leaderboard/provinces',
+    async (request, reply) => {
+      const parsed = QuerySchema.safeParse(request.query);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+      const { period, limit } = parsed.data;
+      const interval = periodInterval(period);
+
+      const rows = await sql`
+        WITH tests AS (
+          SELECT
+            province,
+            COUNT(*)::int AS test_count,
+            COUNT(DISTINCT device_id)::int AS unique_devices,
+            MAX(recorded_at) AS last_at
+          FROM speed_tests
+          WHERE province IS NOT NULL
+            AND recorded_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
+          GROUP BY province
+        ),
+        outages AS (
+          SELECT
+            province,
+            COUNT(*)::int AS report_count,
+            COUNT(*) FILTER (WHERE is_verified)::int AS verified_count,
+            MAX(reported_at) AS last_at
+          FROM outage_reports
+          WHERE province IS NOT NULL
+            AND reported_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
+          GROUP BY province
+        ),
+        merged AS (
+          SELECT
+            COALESCE(t.province, o.province) AS province,
+            COALESCE(t.test_count, 0) AS test_count,
+            COALESCE(t.unique_devices, 0) AS unique_devices,
+            COALESCE(o.report_count, 0) AS report_count,
+            COALESCE(o.verified_count, 0) AS verified_count,
+            GREATEST(COALESCE(t.last_at, o.last_at), COALESCE(o.last_at, t.last_at)) AS last_at
+          FROM tests t
+          FULL OUTER JOIN outages o ON t.province = o.province
+        )
+        SELECT
+          province,
+          test_count,
+          unique_devices,
+          report_count,
+          verified_count,
+          (test_count + 3 * report_count + 2 * verified_count)::int AS score,
+          last_at,
+          ROW_NUMBER() OVER (
+            ORDER BY (test_count + 3 * report_count + 2 * verified_count) DESC,
+                     last_at DESC
+          )::int AS rank
+        FROM merged
+        ORDER BY score DESC, last_at DESC
+        LIMIT ${limit}
+      `;
+
+      return reply.send({ period, leaderboard: rows });
+    }
+  );
+
   // GET /api/v1/leaderboard/me — current user's rank in each board
   fastify.get<{ Querystring: { period?: string } }>(
     '/api/v1/leaderboard/me',
