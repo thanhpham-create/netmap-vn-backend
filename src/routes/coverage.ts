@@ -113,4 +113,53 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
       return reply.send({ buildings, count: buildings.length });
     }
   );
+
+  // GET /api/v1/coverage/history — Time-series tại 1 điểm
+  // Trả về list { month, carrier, sampleCount, avgDownloadMbps, ... }
+  // Dùng bbox prefilter (~500m bằng độ lat/lng) thay vì PostGIS ST_DWithin để giữ
+  // light-weight, không cần extension.
+  fastify.get<{
+    Querystring: { lat: string; lng: string; radius?: string; months?: string };
+  }>('/api/v1/coverage/history', async (request, reply) => {
+    const lat = parseFloat(request.query.lat);
+    const lng = parseFloat(request.query.lng);
+    const radius = parseInt(request.query.radius || '500');   // metres
+    const months = Math.min(parseInt(request.query.months || '6'), 24);
+
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return reply.status(400).send({ error: 'Invalid lat/lng' });
+    }
+
+    // ~111km per degree latitude; longitude scales with cos(lat).
+    const degLat = radius / 111_000;
+    const degLng = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
+    const minLat = lat - degLat, maxLat = lat + degLat;
+    const minLng = lng - degLng, maxLng = lng + degLng;
+
+    const history = await sql`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', recorded_at), 'YYYY-MM')        AS month,
+        carrier_name,
+        network_type,
+        COUNT(*)::int                                                AS sample_count,
+        ROUND(AVG(download_mbps)::numeric, 1)::float                 AS avg_download_mbps,
+        ROUND(AVG(upload_mbps)::numeric, 1)::float                   AS avg_upload_mbps,
+        ROUND(AVG(latency_ms)::numeric, 0)::int                      AS avg_latency_ms
+      FROM speed_tests
+      WHERE
+        latitude  BETWEEN ${minLat} AND ${maxLat}
+        AND longitude BETWEEN ${minLng} AND ${maxLng}
+        AND recorded_at > NOW() - (${months} || ' months')::interval
+      GROUP BY month, carrier_name, network_type
+      HAVING COUNT(*) >= 1
+      ORDER BY month DESC, sample_count DESC
+    `;
+
+    return reply.send({
+      location: { latitude: lat, longitude: lng, radiusM: radius },
+      monthsBack: months,
+      history,
+      totalSamples: history.reduce((s: number, r: any) => s + r.sample_count, 0),
+    });
+  });
 };
