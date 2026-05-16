@@ -209,4 +209,56 @@ export const outagesRoute: FastifyPluginAsync = async (fastify) => {
       generatedAt: new Date().toISOString(),
     });
   });
+
+  // GET /api/v1/outages/ai-summary — natural language summary of recent outages
+  // Returns { summary: null } gracefully when ANTHROPIC_API_KEY is not configured
+  // so the frontend can hide the section without errors.
+  fastify.get('/api/v1/outages/ai-summary', async (_request, reply) => {
+    try {
+      const rows = await sql<Array<{
+        carrierName: string;
+        outageType: string;
+        province: string | null;
+        reportCount: number;
+        firstReported: string;
+        isVerified: boolean;
+      }>>`
+        SELECT
+          carrier_name        AS "carrierName",
+          outage_type         AS "outageType",
+          province,
+          COUNT(*)::int       AS "reportCount",
+          MIN(reported_at)    AS "firstReported",
+          BOOL_OR(is_verified) AS "isVerified"
+        FROM outage_reports
+        WHERE
+          reported_at > NOW() - INTERVAL '6 hours'
+          AND resolved_at IS NULL
+        GROUP BY carrier_name, outage_type, province
+        HAVING COUNT(*) >= 3
+        ORDER BY COUNT(*) DESC
+        LIMIT 30
+      `;
+
+      const { generateOutageSummary } = await import('../lib/ai-summary.js');
+      const summary = await generateOutageSummary(rows);
+
+      return reply.send({
+        summary,
+        outageCount: rows.length,
+        generatedAt: new Date().toISOString(),
+        enabled: !!process.env.ANTHROPIC_API_KEY,
+      });
+    } catch (err) {
+      // AI failure must NOT break the page — log and return null
+      fastify.log.error({ err }, 'AI summary generation failed');
+      return reply.send({
+        summary: null,
+        outageCount: 0,
+        generatedAt: new Date().toISOString(),
+        enabled: !!process.env.ANTHROPIC_API_KEY,
+        error: 'AI summary unavailable',
+      });
+    }
+  });
 };
