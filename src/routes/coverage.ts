@@ -30,11 +30,14 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/v1/coverage/heatmap — Heatmap data for visualization
-  // Returns aggregated points within a bounding box
+  // Returns aggregated points within a bounding box.
+  //
+  // Optional `endDate` (ISO yyyy-mm-dd) cho phép xem snapshot lịch sử —
+  // query window = [endDate - days, endDate]. Default = now → window = last N days.
   fastify.get<{
     Querystring: {
       minLat: string; maxLat: string; minLng: string; maxLng: string;
-      carrier?: string; network?: string; days?: string;
+      carrier?: string; network?: string; days?: string; endDate?: string;
     }
   }>('/api/v1/coverage/heatmap', async (request, reply) => {
     const minLat = parseFloat(request.query.minLat);
@@ -45,34 +48,67 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
     const network = request.query.network || null;
     const days = parseInt(request.query.days || '30');
 
+    // Parse endDate cẩn thận — chỉ accept ISO date hoặc datetime hợp lệ
+    let endDate: Date | null = null;
+    if (request.query.endDate) {
+      const parsed = new Date(request.query.endDate);
+      if (isNaN(parsed.getTime())) {
+        return reply.status(400).send({ error: 'Invalid endDate (expected ISO date)' });
+      }
+      endDate = parsed;
+    }
+
     if ([minLat, maxLat, minLng, maxLng].some(isNaN)) {
       return reply.status(400).send({ error: 'Invalid bounding box' });
     }
 
-    // Group by ~100m grid cells (rough lat/lng quantization)
-    const points = await sql`
-      SELECT
-        ROUND(latitude::numeric, 3) AS lat_grid,
-        ROUND(longitude::numeric, 3) AS lng_grid,
-        carrier_name,
-        network_type,
-        COUNT(*)::int AS sample_count,
-        ROUND(AVG(download_mbps)::numeric, 1) AS avg_download_mbps,
-        ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms
-      FROM speed_tests
-      WHERE
-        recorded_at > NOW() - (${days} || ' days')::interval
-        AND latitude BETWEEN ${minLat} AND ${maxLat}
-        AND longitude BETWEEN ${minLng} AND ${maxLng}
-        ${carrier ? sql`AND carrier_name = ${carrier}` : sql``}
-        ${network ? sql`AND network_type = ${network}` : sql``}
-      GROUP BY lat_grid, lng_grid, carrier_name, network_type
-      HAVING COUNT(*) >= 1
-      ORDER BY sample_count DESC
-      LIMIT 5000
-    `;
+    // Build time window. endDate null → use NOW(). Else use endDate as upper bound.
+    const points = endDate
+      ? await sql`
+          SELECT
+            ROUND(latitude::numeric, 3) AS lat_grid,
+            ROUND(longitude::numeric, 3) AS lng_grid,
+            carrier_name,
+            network_type,
+            COUNT(*)::int AS sample_count,
+            ROUND(AVG(download_mbps)::numeric, 1) AS avg_download_mbps,
+            ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms
+          FROM speed_tests
+          WHERE
+            recorded_at <= ${endDate}
+            AND recorded_at >  ${endDate}::timestamptz - (${days} || ' days')::interval
+            AND latitude BETWEEN ${minLat} AND ${maxLat}
+            AND longitude BETWEEN ${minLng} AND ${maxLng}
+            ${carrier ? sql`AND carrier_name = ${carrier}` : sql``}
+            ${network ? sql`AND network_type = ${network}` : sql``}
+          GROUP BY lat_grid, lng_grid, carrier_name, network_type
+          HAVING COUNT(*) >= 1
+          ORDER BY sample_count DESC
+          LIMIT 5000
+        `
+      : await sql`
+          SELECT
+            ROUND(latitude::numeric, 3) AS lat_grid,
+            ROUND(longitude::numeric, 3) AS lng_grid,
+            carrier_name,
+            network_type,
+            COUNT(*)::int AS sample_count,
+            ROUND(AVG(download_mbps)::numeric, 1) AS avg_download_mbps,
+            ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms
+          FROM speed_tests
+          WHERE
+            recorded_at > NOW() - (${days} || ' days')::interval
+            AND latitude BETWEEN ${minLat} AND ${maxLat}
+            AND longitude BETWEEN ${minLng} AND ${maxLng}
+            ${carrier ? sql`AND carrier_name = ${carrier}` : sql``}
+            ${network ? sql`AND network_type = ${network}` : sql``}
+          GROUP BY lat_grid, lng_grid, carrier_name, network_type
+          HAVING COUNT(*) >= 1
+          ORDER BY sample_count DESC
+          LIMIT 5000
+        `;
 
-    return reply.send({ points, count: points.length });
+    return reply.send({ points, count: points.length, endDate, days });
   });
 
   // GET /api/v1/coverage/buildings — Building-level coverage (hyper-local feature)
