@@ -36,7 +36,8 @@ export const carriersRoute: FastifyPluginAsync = async (fastify) => {
           COUNT(DISTINCT device_id)::int                   AS device_count
         FROM speed_tests
         WHERE
-          recorded_at > NOW() - make_interval(days => ${days}::int)
+          NOT is_flagged
+          AND recorded_at > NOW() - make_interval(days => ${days}::int)
           ${province ? sql`AND province = ${province}` : sql``}
           ${network ? sql`AND network_type = ${network}` : sql``}
         GROUP BY carrier_name
@@ -52,7 +53,8 @@ export const carriersRoute: FastifyPluginAsync = async (fastify) => {
           COUNT(*) FILTER (WHERE is_verified)::int     AS verified_outages
         FROM outage_reports
         WHERE
-          reported_at > NOW() - make_interval(days => ${days}::int)
+          NOT is_flagged
+          AND reported_at > NOW() - make_interval(days => ${days}::int)
           ${province ? sql`AND province = ${province}` : sql``}
         GROUP BY carrier_name
       `;
@@ -91,6 +93,7 @@ export const carriersRoute: FastifyPluginAsync = async (fastify) => {
       SELECT province, COUNT(*)::int AS test_count
       FROM speed_tests
       WHERE province IS NOT NULL
+        AND NOT is_flagged
         AND recorded_at > NOW() - INTERVAL '90 days'
       GROUP BY province
       ORDER BY test_count DESC

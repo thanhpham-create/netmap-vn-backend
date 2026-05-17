@@ -116,6 +116,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
           FROM speed_tests st
           JOIN devices d ON d.id = st.device_id
           WHERE d.user_id IS NOT NULL
+            AND NOT st.is_flagged
             AND st.recorded_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY d.user_id
         ),
@@ -127,6 +128,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
           FROM outage_reports o
           JOIN devices d ON d.id = o.device_id
           WHERE d.user_id IS NOT NULL
+            AND NOT o.is_flagged
             AND o.reported_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY d.user_id
         ),
@@ -183,6 +185,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
             MAX(recorded_at) AS last_at
           FROM speed_tests
           WHERE province IS NOT NULL
+            AND NOT is_flagged
             AND recorded_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY province
         ),
@@ -194,6 +197,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
             MAX(reported_at) AS last_at
           FROM outage_reports
           WHERE province IS NOT NULL
+            AND NOT is_flagged
             AND reported_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY province
         ),
@@ -248,6 +252,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
           FROM speed_tests st
           JOIN devices d ON d.id = st.device_id
           WHERE d.user_id IS NOT NULL
+            AND NOT st.is_flagged
             AND st.recorded_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY d.user_id
         ),
@@ -258,6 +263,7 @@ export const leaderboardRoute: FastifyPluginAsync = async (fastify) => {
           FROM outage_reports o
           JOIN devices d ON d.id = o.device_id
           WHERE d.user_id IS NOT NULL
+            AND NOT o.is_flagged
             AND o.reported_at > NOW() - INTERVAL '${sql.unsafe(interval)}'
           GROUP BY d.user_id
         ),

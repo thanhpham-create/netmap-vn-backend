@@ -74,6 +74,7 @@ export async function computeBadges(userId: string): Promise<UserBadge[]> {
         MIN(recorded_at) FILTER (WHERE network_type LIKE '5G%') AS first_5g_at
       FROM speed_tests
       WHERE device_id IN (SELECT id FROM user_devices)
+        AND NOT is_flagged
     ),
     outage_stats AS (
       SELECT
@@ -82,6 +83,7 @@ export async function computeBadges(userId: string): Promise<UserBadge[]> {
         MIN(reported_at)                                  AS first_report_at
       FROM outage_reports
       WHERE device_id IN (SELECT id FROM user_devices)
+        AND NOT is_flagged
     )
     SELECT
       COALESCE(t.test_count, 0)         AS test_count,

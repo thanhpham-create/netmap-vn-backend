@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import sql from '../db/index.js';
 import { broadcastOutageAlert } from '../lib/push.js';
+import { detectOutageAnomaly } from '../lib/anomaly.js';
 
 const ReportOutageSchema = z.object({
   // deviceUid removed — taken from auth token
@@ -29,6 +30,16 @@ export const outagesRoute: FastifyPluginAsync = async (fastify) => {
     const d = parsed.data;
     const ctx = request.deviceContext;
     if (!ctx) return reply.status(401).send({ error: 'No device context' });
+
+    // Anti-abuse: detect spam bursts.
+    const { soft: outageFlags } = await detectOutageAnomaly({
+      deviceId: ctx.deviceId,
+      description: d.description,
+    });
+    const isOutageFlagged = outageFlags.length > 0;
+    if (isOutageFlagged) {
+      request.log.info({ deviceId: ctx.deviceId, outageFlags }, 'Outage report flagged');
+    }
 
     // Check for similar reports nearby in last hour (cluster detection)
     // Bbox prefilter uses idx_outage_geo before exact Haversine.
@@ -58,12 +69,14 @@ export const outagesRoute: FastifyPluginAsync = async (fastify) => {
       INSERT INTO outage_reports (
         device_id, carrier_name, outage_type, description,
         latitude, longitude, province, district, ward,
-        cluster_size, is_verified
+        cluster_size, is_verified,
+        is_flagged, flag_reasons
       ) VALUES (
         ${ctx.deviceId}, ${d.carrierName}, ${d.outageType}, ${d.description ?? null},
         ${d.latitude}, ${d.longitude},
         ${d.province ?? null}, ${d.district ?? null}, ${d.ward ?? null},
-        ${clusterSize}, ${isVerified}
+        ${clusterSize}, ${isVerified},
+        ${isOutageFlagged}, ${outageFlags as any}
       )
       RETURNING id, reported_at, cluster_size, is_verified
     `;
@@ -197,7 +210,8 @@ export const outagesRoute: FastifyPluginAsync = async (fastify) => {
         ARRAY_AGG(DISTINCT province ORDER BY province) FILTER (WHERE province IS NOT NULL) AS provinces
       FROM outage_reports
       WHERE
-        reported_at > NOW() - INTERVAL '6 hours'
+        NOT is_flagged
+        AND reported_at > NOW() - INTERVAL '6 hours'
         AND resolved_at IS NULL
       GROUP BY carrier_name, outage_type
       HAVING COUNT(*) >= 5
@@ -232,7 +246,8 @@ export const outagesRoute: FastifyPluginAsync = async (fastify) => {
           BOOL_OR(is_verified) AS "isVerified"
         FROM outage_reports
         WHERE
-          reported_at > NOW() - INTERVAL '6 hours'
+          NOT is_flagged
+          AND reported_at > NOW() - INTERVAL '6 hours'
           AND resolved_at IS NULL
         GROUP BY carrier_name, outage_type, province
         HAVING COUNT(*) >= 3

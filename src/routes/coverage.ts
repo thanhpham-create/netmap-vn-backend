@@ -75,7 +75,8 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
             ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms
           FROM speed_tests
           WHERE
-            recorded_at <= ${endDate}
+            NOT is_flagged
+            AND recorded_at <= ${endDate}
             AND recorded_at >  ${endDate}::timestamptz - (${days} || ' days')::interval
             AND latitude BETWEEN ${minLat} AND ${maxLat}
             AND longitude BETWEEN ${minLng} AND ${maxLng}
@@ -97,7 +98,8 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
             ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms
           FROM speed_tests
           WHERE
-            recorded_at > NOW() - (${days} || ' days')::interval
+            NOT is_flagged
+            AND recorded_at > NOW() - (${days} || ' days')::interval
             AND latitude BETWEEN ${minLat} AND ${maxLat}
             AND longitude BETWEEN ${minLng} AND ${maxLng}
             ${carrier ? sql`AND carrier_name = ${carrier}` : sql``}
@@ -183,7 +185,8 @@ export const coverageRoute: FastifyPluginAsync = async (fastify) => {
         ROUND(AVG(latency_ms)::numeric, 0)::int                      AS avg_latency_ms
       FROM speed_tests
       WHERE
-        latitude  BETWEEN ${minLat} AND ${maxLat}
+        NOT is_flagged
+        AND latitude  BETWEEN ${minLat} AND ${maxLat}
         AND longitude BETWEEN ${minLng} AND ${maxLng}
         AND recorded_at > NOW() - (${months} || ' months')::interval
       GROUP BY month, carrier_name, network_type

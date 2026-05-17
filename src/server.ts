@@ -2,6 +2,7 @@
 import { Sentry } from './lib/sentry.js';
 
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
@@ -37,6 +38,15 @@ const fastify = Fastify({
 });
 
 async function bootstrap() {
+  // Response compression — gzip/brotli on JSON payloads. Heatmap responses can
+  // be 50-200KB → compressed thường 10-30KB (~5x reduction).
+  // Threshold 1KB tránh overhead với small responses.
+  await fastify.register(compress, {
+    global: true,
+    threshold: 1024,
+    encodings: ['br', 'gzip'],   // brotli ưu tiên, fallback gzip
+  });
+
   // Security headers — HSTS, X-Content-Type-Options, X-Frame-Options, etc.
   // Disabling CSP because this is a JSON API; CSP enforcement is responsibility of the SPA.
   await fastify.register(helmet, {
@@ -142,6 +152,47 @@ async function bootstrap() {
       'x-ratelimit-reset':     true,
       'retry-after':           true,
     },
+  });
+
+  // Cache-Control headers cho responses cacheable.
+  // CDN/edge cache (s-maxage) hơi dài hơn browser cache (max-age) để giảm load DB.
+  // private/no-store cho data nhạy cảm (auth, me, admin) để CDN không cache nhầm.
+  const CACHE_PUBLIC_60S      = 'public, max-age=30, s-maxage=60, stale-while-revalidate=120';
+  const CACHE_PUBLIC_5MIN     = 'public, max-age=120, s-maxage=300, stale-while-revalidate=600';
+  const CACHE_PRIVATE_NOSTORE = 'private, no-store, no-cache, must-revalidate';
+
+  fastify.addHook('onSend', async (request, reply, payload) => {
+    if (request.method !== 'GET') return payload;
+    const url = request.url.split('?')[0];
+
+    // No-cache cho dữ liệu user-specific & admin
+    if (
+      url.startsWith('/api/v1/auth/me') ||
+      url.startsWith('/api/v1/admin') ||
+      url.startsWith('/api/v1/badges/me') ||
+      url.startsWith('/api/v1/push/me') ||
+      url.startsWith('/api/v1/leaderboard/me')
+    ) {
+      reply.header('cache-control', CACHE_PRIVATE_NOSTORE);
+      return payload;
+    }
+
+    // Static-ish data — cache lâu hơn (badge definitions, sitemap)
+    if (url === '/api/v1/badges' || url.startsWith('/api/v1/carriers')) {
+      reply.header('cache-control', CACHE_PUBLIC_5MIN);
+      return payload;
+    }
+
+    // Heatmap, outages, leaderboard — cache ngắn vì data refresh thường xuyên
+    if (
+      url.startsWith('/api/v1/coverage') ||
+      url.startsWith('/api/v1/outages') ||
+      url.startsWith('/api/v1/leaderboard')
+    ) {
+      reply.header('cache-control', CACHE_PUBLIC_60S);
+    }
+
+    return payload;
   });
 
   // Health check

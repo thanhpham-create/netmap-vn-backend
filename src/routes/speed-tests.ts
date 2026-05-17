@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import sql from '../db/index.js';
+import { detectSpeedTestAnomaly } from '../lib/anomaly.js';
 
 const SubmitSpeedTestSchema = z.object({
   // deviceUid removed — taken from auth token, not body
@@ -60,6 +61,32 @@ export const speedTestsRoute: FastifyPluginAsync = async (fastify) => {
         return reply.status(401).send({ error: 'No device context' });
       }
 
+      // Anomaly detection — reject impossible values; flag suspicious ones.
+      // Flagged tests are stored but excluded from public aggregates.
+      const { hard, soft } = await detectSpeedTestAnomaly({
+        carrierName:    d.carrierName,
+        networkType:    d.networkType,
+        downloadMbps:   d.downloadMbps,
+        uploadMbps:     d.uploadMbps,
+        latencyMs:      d.latencyMs,
+        latitude:       d.latitude,
+        longitude:      d.longitude,
+        testDurationMs: d.testDurationMs,
+        deviceId:       ctx.deviceId,
+      });
+
+      if (hard.length > 0) {
+        request.log.warn({ deviceId: ctx.deviceId, hard, soft }, 'Speed test rejected (hard anomaly)');
+        return reply.status(422).send({
+          error: 'Speed test values are not physically possible',
+          reasons: hard,
+        });
+      }
+      const isFlagged = soft.length > 0;
+      if (isFlagged) {
+        request.log.info({ deviceId: ctx.deviceId, soft }, 'Speed test flagged (soft anomaly)');
+      }
+
       // Insert speed test
       const [test] = await sql`
         INSERT INTO speed_tests (
@@ -67,7 +94,8 @@ export const speedTestsRoute: FastifyPluginAsync = async (fastify) => {
           download_mbps, upload_mbps, latency_ms, jitter_ms, packet_loss_pct,
           latitude, longitude, altitude_m, location_accuracy_m,
           province, district, ward, building_name,
-          test_duration_ms, test_server, test_type
+          test_duration_ms, test_server, test_type,
+          is_flagged, flag_reasons
         ) VALUES (
           ${ctx.deviceId}, ${d.carrierName}, ${d.networkType}, ${d.isRoaming},
           ${d.downloadMbps}, ${d.uploadMbps}, ${d.latencyMs},
@@ -75,7 +103,8 @@ export const speedTestsRoute: FastifyPluginAsync = async (fastify) => {
           ${d.latitude}, ${d.longitude},
           ${d.altitudeM ?? null}, ${d.locationAccuracyM ?? null},
           ${d.province ?? null}, ${d.district ?? null}, ${d.ward ?? null}, ${d.buildingName ?? null},
-          ${d.testDurationMs ?? null}, ${d.testServer ?? null}, ${d.testType}
+          ${d.testDurationMs ?? null}, ${d.testServer ?? null}, ${d.testType},
+          ${isFlagged}, ${soft as any}
         )
         RETURNING id, recorded_at
       `;

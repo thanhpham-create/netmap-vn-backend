@@ -66,7 +66,8 @@ export const dataRoute: FastifyPluginAsync = async (fastify) => {
         recorded_at
       FROM speed_tests
       WHERE
-        recorded_at BETWEEN ${fromDate} AND ${toDate}
+        NOT is_flagged
+        AND recorded_at BETWEEN ${fromDate} AND ${toDate}
         ${q.province ? sql`AND province = ${q.province}` : sql``}
         ${q.carrier  ? sql`AND carrier_name = ${q.carrier}` : sql``}
         ${q.network  ? sql`AND network_type = ${q.network}` : sql``}
@@ -93,7 +94,8 @@ export const dataRoute: FastifyPluginAsync = async (fastify) => {
         cluster_size, is_verified, resolved_at, reported_at
       FROM outage_reports
       WHERE
-        reported_at BETWEEN ${fromDate} AND ${toDate}
+        NOT is_flagged
+        AND reported_at BETWEEN ${fromDate} AND ${toDate}
         ${q.province ? sql`AND province = ${q.province}` : sql``}
         ${q.carrier  ? sql`AND carrier_name = ${q.carrier}` : sql``}
         ${q.verifiedOnly ? sql`AND is_verified = TRUE` : sql``}
@@ -123,7 +125,8 @@ export const dataRoute: FastifyPluginAsync = async (fastify) => {
           1
         )                                                AS pct_5g
       FROM speed_tests
-      WHERE recorded_at > NOW() - make_interval(days => ${q.days}::int)
+      WHERE NOT is_flagged
+        AND recorded_at > NOW() - make_interval(days => ${q.days}::int)
       GROUP BY 1, carrier_name
       ORDER BY date DESC, carrier_name
     `;
