@@ -41,7 +41,7 @@ const CACHE_TTL_MS = 24 * 3600 * 1000;
 // Source: APNIC + RIPE registrations as of 2025/2026. Update periodically.
 type CidrRule = { prefix: string; bits: number; carrier: string; asn: number };
 const VN_CARRIER_CIDRS: CidrRule[] = [
-  // Viettel — AS7552 (international + most consumer)
+  // ── Viettel — AS7552 ─────────────────────────────────────────
   { prefix: '1.52.0.0',     bits: 14, carrier: 'Viettel', asn: 7552 },
   { prefix: '14.160.0.0',   bits: 11, carrier: 'Viettel', asn: 7552 },
   { prefix: '14.224.0.0',   bits: 11, carrier: 'Viettel', asn: 7552 },
@@ -50,22 +50,37 @@ const VN_CARRIER_CIDRS: CidrRule[] = [
   { prefix: '113.160.0.0',  bits: 11, carrier: 'Viettel', asn: 7552 },
   { prefix: '171.224.0.0',  bits: 11, carrier: 'Viettel', asn: 7552 },
   { prefix: '203.113.128.0',bits: 17, carrier: 'Viettel', asn: 7552 },
-  // VNPT — AS45899
+  { prefix: '210.245.0.0',  bits: 16, carrier: 'Viettel', asn: 7552 },
+  { prefix: '203.190.160.0',bits: 19, carrier: 'Viettel', asn: 7552 },
+  // ── VNPT (incl. VinaPhone mobile) — AS45899 ──────────────────
   { prefix: '14.232.0.0',   bits: 13, carrier: 'VNPT', asn: 45899 },
   { prefix: '116.96.0.0',   bits: 12, carrier: 'VNPT', asn: 45899 },
+  { prefix: '113.176.0.0',  bits: 12, carrier: 'VNPT', asn: 45899 },
   { prefix: '125.234.0.0',  bits: 15, carrier: 'VNPT', asn: 45899 },
   { prefix: '171.232.0.0',  bits: 13, carrier: 'VNPT', asn: 45899 },
-  { prefix: '113.176.0.0',  bits: 12, carrier: 'VNPT', asn: 45899 },
-  // MobiFone — AS45776
+  { prefix: '203.162.0.0',  bits: 16, carrier: 'VNPT', asn: 45899 },
+  { prefix: '222.252.0.0',  bits: 16, carrier: 'VNPT', asn: 45899 },
+  { prefix: '123.16.0.0',   bits: 13, carrier: 'VNPT', asn: 45899 },
+  { prefix: '14.231.0.0',   bits: 16, carrier: 'VNPT', asn: 45899 },
+  // ── MobiFone — AS45776 ──────────────────────────────────────
   { prefix: '125.214.0.0',  bits: 17, carrier: 'MobiFone', asn: 45776 },
-  // Vietnamobile — AS135887
+  { prefix: '210.245.0.0',  bits: 18, carrier: 'MobiFone', asn: 45776 },
+  // ── Vietnamobile — AS135887 ─────────────────────────────────
   { prefix: '113.187.0.0',  bits: 16, carrier: 'Vietnamobile', asn: 135887 },
-  // FPT (ISP) — AS18403
+  { prefix: '14.187.0.0',   bits: 16, carrier: 'Vietnamobile', asn: 135887 },
+  // ── FPT Telecom — AS18403 (ISP fiber-to-home phổ biến) ──────
   { prefix: '14.169.0.0',   bits: 16, carrier: 'FPT', asn: 18403 },
   { prefix: '42.118.0.0',   bits: 16, carrier: 'FPT', asn: 18403 },
+  { prefix: '113.171.0.0',  bits: 16, carrier: 'FPT', asn: 18403 },
   { prefix: '113.190.0.0',  bits: 16, carrier: 'FPT', asn: 18403 },
-  // CMC — AS131193
+  { prefix: '117.0.0.0',    bits: 13, carrier: 'FPT', asn: 18403 },
+  { prefix: '118.69.0.0',   bits: 16, carrier: 'FPT', asn: 18403 },
+  { prefix: '210.245.32.0', bits: 19, carrier: 'FPT', asn: 18403 },
+  { prefix: '123.30.0.0',   bits: 15, carrier: 'FPT', asn: 18403 },
+  // ── CMC Telecom — AS131193 ──────────────────────────────────
   { prefix: '103.74.116.0', bits: 22, carrier: 'CMC', asn: 131193 },
+  { prefix: '203.113.156.0',bits: 22, carrier: 'CMC', asn: 131193 },
+  { prefix: '14.241.0.0',   bits: 16, carrier: 'CMC', asn: 131193 },
 ];
 
 function ipToInt(ip: string): number {
@@ -114,32 +129,69 @@ export async function detectCarrier(ip: string): Promise<CarrierDetection> {
   const cached = cache.get(ip);
   if (cached && cached.expires > Date.now()) return cached.value;
 
-  // Lookup via iptoasn.com (free, no key). Timeout 8s — Railway → external can be slow.
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(`https://api.iptoasn.com/v1/as/ip/${encodeURIComponent(ip)}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (res.ok) {
+  // Try iptoasn.com first, then fallback to ipapi.co.
+  // Timeout 4s each (down từ 8s) — fail-fast hơn để fallback nhanh.
+  type LookupOk = { asn: number; asName: string | null; asCountry: string | null };
+  async function lookupViaIptoAsn(): Promise<LookupOk | null> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`https://api.iptoasn.com/v1/as/ip/${encodeURIComponent(ip)}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
       const data: any = await res.json();
-      if (data.announced && data.as_number) {
-        const asn = Number(data.as_number);
-        const asName = data.as_description || null;
-        const asCountry = data.as_country_code || null;
-        const carrier = ASN_TO_CARRIER[asn] || null;
-        const value: CarrierDetection = {
-          ip, asn, asName, asCountry, carrier,
-          confidence: carrier ? 'high' : (asCountry === 'VN' ? 'low' : 'none'),
-        };
-        cache.set(ip, { value, expires: Date.now() + CACHE_TTL_MS });
-        return value;
-      }
-    }
-  } catch {
-    // External API failed — fall through to hardcoded fallback below
+      if (!data.announced || !data.as_number) return null;
+      return {
+        asn: Number(data.as_number),
+        asName: data.as_description || null,
+        asCountry: data.as_country_code || null,
+      };
+    } catch { return null; }
+  }
+
+  async function lookupViaIpApi(): Promise<LookupOk | null> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      // ipapi.co — free 30k req/month, no key needed
+      const res = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      if (!data.asn) return null;
+      // ipapi.co returns asn as string like "AS7552"
+      const asnNum = Number(String(data.asn).replace(/^AS/i, ''));
+      if (!asnNum) return null;
+      return {
+        asn: asnNum,
+        asName: data.org || data.asn || null,
+        asCountry: data.country_code || null,
+      };
+    } catch { return null; }
+  }
+
+  // Run both in parallel — use first success
+  const lookup = await Promise.race([
+    lookupViaIptoAsn().then((r) => r ?? lookupViaIpApi()),
+    lookupViaIpApi().then((r) => r ?? lookupViaIptoAsn()),
+  ]);
+
+  if (lookup) {
+    const carrier = ASN_TO_CARRIER[lookup.asn] || null;
+    const value: CarrierDetection = {
+      ip,
+      asn: lookup.asn,
+      asName: lookup.asName,
+      asCountry: lookup.asCountry,
+      carrier,
+      confidence: carrier ? 'high' : (lookup.asCountry === 'VN' ? 'low' : 'none'),
+    };
+    cache.set(ip, { value, expires: Date.now() + CACHE_TTL_MS });
+    return value;
   }
 
   // Fallback: hardcoded VN carrier CIDR ranges (limited but covers ~95% of common cases)

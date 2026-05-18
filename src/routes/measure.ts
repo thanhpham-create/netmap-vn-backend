@@ -9,9 +9,10 @@ const MAX_DOWNLOAD_MB = 50;
 const MAX_UPLOAD_MB = 25;
 
 // Pre-generate random buffers for common sizes to avoid CPU thrash on each request.
-// 1, 5, 10 MB common for client speedtest.
+// 25 MB is the default size for time-bounded client speedtest (chunked stream reads
+// until timeout). Always served from pregen, never regen per-request.
 const PREGEN: Map<number, Buffer> = new Map();
-for (const mb of [1, 5, 10]) {
+for (const mb of [1, 5, 10, 25]) {
   PREGEN.set(mb, randomBytes(mb * 1024 * 1024));
 }
 
