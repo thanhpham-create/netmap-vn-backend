@@ -59,7 +59,8 @@ const VN_CARRIER_CIDRS: CidrRule[] = [
   { prefix: '125.234.0.0',  bits: 15, carrier: 'VNPT', asn: 45899 },
   { prefix: '171.232.0.0',  bits: 13, carrier: 'VNPT', asn: 45899 },
   { prefix: '203.162.0.0',  bits: 16, carrier: 'VNPT', asn: 45899 },
-  { prefix: '222.252.0.0',  bits: 16, carrier: 'VNPT', asn: 45899 },
+  // 222.252.0.0/14 covers 222.252.0.0–222.255.255.255 (toàn dải VNPT-VN per APNIC)
+  { prefix: '222.252.0.0',  bits: 14, carrier: 'VNPT', asn: 45899 },
   { prefix: '123.16.0.0',   bits: 13, carrier: 'VNPT', asn: 45899 },
   { prefix: '14.231.0.0',   bits: 16, carrier: 'VNPT', asn: 45899 },
   // ── MobiFone — AS45776 ──────────────────────────────────────
@@ -174,10 +175,38 @@ export async function detectCarrier(ip: string): Promise<CarrierDetection> {
     } catch { return null; }
   }
 
-  // Run both in parallel — use first success
+  // Team Cymru free WHOIS service — không key, ổn định.
+  // Format: dig +short AS<ip>.origin.asn.cymru.com TXT
+  // Vì backend không có dig sẵn, dùng DNS-over-HTTPS (DoH) qua Cloudflare.
+  async function lookupViaCymru(): Promise<LookupOk | null> {
+    try {
+      const reversed = ip.split('.').reverse().join('.');
+      const query = `${reversed}.origin.asn.cymru.com`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(
+        `https://cloudflare-dns.com/dns-query?name=${query}&type=TXT`,
+        { signal: controller.signal, headers: { Accept: 'application/dns-json' } },
+      );
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const answer = data.Answer?.[0]?.data;
+      if (!answer) return null;
+      // Format: "ASN | Prefix | Country | Registry | Allocation_date"
+      // e.g. "7552 | 1.52.0.0/14 | VN | apnic | 2010-07-21"
+      const parts = String(answer).replace(/"/g, '').split('|').map((s) => s.trim());
+      const asn = parseInt(parts[0]);
+      if (!asn) return null;
+      return { asn, asName: null, asCountry: parts[2] || null };
+    } catch { return null; }
+  }
+
+  // Run all 3 in parallel — first non-null wins
   const lookup = await Promise.race([
-    lookupViaIptoAsn().then((r) => r ?? lookupViaIpApi()),
-    lookupViaIpApi().then((r) => r ?? lookupViaIptoAsn()),
+    lookupViaIptoAsn().then((r) => r ?? lookupViaIpApi().then((r2) => r2 ?? lookupViaCymru())),
+    lookupViaIpApi().then((r) => r ?? lookupViaIptoAsn().then((r2) => r2 ?? lookupViaCymru())),
+    lookupViaCymru().then((r) => r ?? lookupViaIptoAsn().then((r2) => r2 ?? lookupViaIpApi())),
   ]);
 
   if (lookup) {
