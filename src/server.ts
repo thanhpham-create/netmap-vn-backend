@@ -45,6 +45,9 @@ async function bootstrap() {
     global: true,
     threshold: 1024,
     encodings: ['br', 'gzip'],   // brotli ưu tiên, fallback gzip
+    // Skip /measure/download responses: random bytes không compress được nhưng
+    // CPU vẫn tốn cho thử → chậm response on speedtest endpoint.
+    customTypes: /^(?!application\/octet-stream).*/,
   });
 
   // Security headers — HSTS, X-Content-Type-Options, X-Frame-Options, etc.

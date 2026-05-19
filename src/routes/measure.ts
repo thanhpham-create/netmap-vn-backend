@@ -38,7 +38,9 @@ export const measureRoute: FastifyPluginAsync = async (fastify) => {
     return reply.send(detection);
   });
 
-  // GET /api/v1/measure/download/:sizeMb — return N MB of random bytes
+  // GET /api/v1/measure/download/:sizeMb — return N MB of random bytes.
+  // Skip compression: random bytes không compress được nhưng @fastify/compress
+  // vẫn tốn CPU thử + chậm response. Tắt explicit qua identity encoding.
   fastify.get<{ Params: { sizeMb: string } }>(
     '/api/v1/measure/download/:sizeMb',
     { config: measureRateLimit },
@@ -50,6 +52,10 @@ export const measureRoute: FastifyPluginAsync = async (fastify) => {
       const buf = PREGEN.get(sizeMb) || randomBytes(sizeMb * 1024 * 1024);
       reply.header('Content-Type', 'application/octet-stream');
       reply.header('Cache-Control', 'no-store');
+      // Tell @fastify/compress to skip (random bytes won't compress)
+      (reply as any).removeHeader?.('content-encoding');
+      reply.header('Content-Encoding', 'identity');
+      reply.header('Content-Length', String(buf.length));
       return reply.send(buf);
     }
   );
