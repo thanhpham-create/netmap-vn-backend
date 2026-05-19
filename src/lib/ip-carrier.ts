@@ -13,20 +13,22 @@ export type CarrierDetection = {
 
 // Known Vietnamese carrier ASNs (current as of 2025/2026).
 // Maintained based on RIPE/APNIC registrations. Update as needed.
+// ASN → carrier mapping. VERIFIED qua APNIC WHOIS + bgp.he.net + whatismyipaddress.com.
+// Nếu thêm/sửa ASN, cross-check ít nhất 2 nguồn — đừng tin một nguồn duy nhất.
 const ASN_TO_CARRIER: Record<number, string> = {
-  // Viettel (Tập đoàn Công nghiệp – Viễn thông Quân đội)
-  7552:   'Viettel',     // VIETEL-AS-AP
+  // ── Viettel (Tập đoàn Công nghiệp – Viễn thông Quân đội) ────────
+  7552:   'Viettel',     // VIETEL-AS-AP (Viettel chính, dùng quốc tế)
+  24086:  'Viettel',     // VIETTEL-AS-VN (Viettel domestic — đây là ASN consumer FTTH chính)
   131429: 'Viettel',     // VIETTEL-AS-VN (mobile)
   135905: 'Viettel',     // VIETTEL-AS-VN (additional)
   45543:  'Viettel',     // VIETTEL-NETWORK
-  // VNPT (Vietnam Posts & Telecommunications)
-  45899:  'VNPT',        // VNPT-AS-VN
-  24086:  'VNPT',        // VNPT-NET
-  // MobiFone (separated from VNPT in 2014)
+  // ── VNPT (Vietnam Posts & Telecommunications) ──────────────────
+  45899:  'VNPT',        // VNPT-AS-VN (VinaPhone mobile + FTTH)
+  // ── MobiFone (separated from VNPT in 2014) ─────────────────────
   45776:  'MobiFone',    // MOBIFONE-AS-VN
-  // Vietnamobile (Hutchison)
+  // ── Vietnamobile (Hutchison) ──────────────────────────────────
   135887: 'Vietnamobile',// HUTCH-AS-VN
-  // Major fixed-line ISPs (for WiFi)
+  // ── Major fixed-line ISPs (for WiFi) ──────────────────────────
   18403:  'FPT',         // FPT-AS-VN
   131193: 'CMC',         // CMC-AS-VN
   38731:  'CMC',         // CMC-NET
@@ -54,7 +56,8 @@ const VN_CARRIER_CIDRS: CidrRule[] = [
   { prefix: '203.190.160.0',bits: 19, carrier: 'Viettel', asn: 7552 },
   // ── VNPT (incl. VinaPhone mobile) — AS45899 ──────────────────
   { prefix: '14.232.0.0',   bits: 13, carrier: 'VNPT', asn: 45899 },
-  { prefix: '116.96.0.0',   bits: 12, carrier: 'VNPT', asn: 45899 },
+  // 116.96.0.0/12 đã REMOVE — dải này split giữa Viettel + VNPT,
+  // hardcode broad sẽ mis-attribute. Dùng ASN lookup thay vì CIDR fallback.
   { prefix: '113.176.0.0',  bits: 12, carrier: 'VNPT', asn: 45899 },
   { prefix: '125.234.0.0',  bits: 15, carrier: 'VNPT', asn: 45899 },
   { prefix: '171.232.0.0',  bits: 13, carrier: 'VNPT', asn: 45899 },
